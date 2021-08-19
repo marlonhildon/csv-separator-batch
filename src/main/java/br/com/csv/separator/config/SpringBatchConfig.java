@@ -1,7 +1,9 @@
 package br.com.csv.separator.config;
 
 import br.com.csv.separator.batch.CsvBatchItemProcessor;
+import br.com.csv.separator.batch.CsvBatchTasklet;
 import br.com.csv.separator.domain.PostoVacinacao;
+import br.com.csv.separator.listener.CsvSeparatorBatchStepListener;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -23,6 +25,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 
 import javax.sql.DataSource;
+import java.util.stream.Stream;
 
 @Slf4j
 @Configuration
@@ -50,7 +53,7 @@ public class SpringBatchConfig {
         log.info("Retornando instancia de FlatFileItemReader");
         return new FlatFileItemReaderBuilder<PostoVacinacao>()
                 .name("csvBatchItemReader")
-                .resource(csvFileResource[0])
+                .resource(Stream.of(csvFileResource).findFirst().orElseThrow())
                 .delimited()
                 .delimiter(";")
                 .names("id", "endereco", "cep")
@@ -79,17 +82,32 @@ public class SpringBatchConfig {
      * @return JdbcBatchItemWriter&lt;PostoVacinacao&gt;
      */
     @Bean("csvBatchItemWriter")
-    public JdbcBatchItemWriter<PostoVacinacao> manageItemWriter(@Qualifier("h2Datasource") DataSource dataSource) {
+    public JdbcBatchItemWriter<PostoVacinacao> manageItemWriter(DataSource dataSource) {
         log.info("Retornando instancia de JdbcBatchItemWriter");
         return new JdbcBatchItemWriterBuilder<PostoVacinacao>()
                 .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
-                .sql("INSERT INTO postoVacinacao (endereco, cep) VALUES (:endereco, :cep)")
+                .sql("INSERT INTO posto_vacinacao (endereco, cep) VALUES (:endereco, :cep)")
                 .dataSource(dataSource)
                 .build();
     }
 
     /**
-     * Configuração do Step.
+     * Configuração do Step do tipo tasklet.
+     * @param csvBatchTasklet o Tasklet.
+     *
+     * @return Step
+     */
+    @Bean("csvTaskletStep")
+    public Step manageCsvTaskletStep(CsvBatchTasklet csvBatchTasklet) {
+        log.info("Instanciando Step csvTaskletStep");
+        return steps.get("csvTaskletStep")
+                .tasklet(csvBatchTasklet)
+                .listener(new CsvSeparatorBatchStepListener())
+                .build();
+    }
+
+    /**
+     * Configuração do Step do tipo chunk.
      *
      * @param itemReader o ItemReader
      * @param itemProcessor o ItemProcessor
@@ -102,12 +120,13 @@ public class SpringBatchConfig {
             CsvBatchItemProcessor itemProcessor,
             JdbcBatchItemWriter<PostoVacinacao> itemWriter)
     {
-        log.info("Instanciando Step");
+        log.info("Instanciando Step csvBatchStep");
         return steps.get("csvBatchStep")
                 .<PostoVacinacao, PostoVacinacao> chunk(10)
                 .reader(itemReader)
                 .processor(itemProcessor)
                 .writer(itemWriter)
+                .listener(new CsvSeparatorBatchStepListener())
                 .build();
     }
 
@@ -117,15 +136,19 @@ public class SpringBatchConfig {
      * Sem isso, se o job já fosse executado ao menos uma vez com sucesso e com os mesmos argumentos de entrada, o
      * Spring alertaria que o job já foi executado (e finalizaria a execução).
      *
-     * @param firstStepManager o Step que o Job executará
+     * @param csvBatchStep o Step do tipo chunk que o Job executará
+     * @param taskletStep o Step do tipo tasklet que o Job executará
      * @return Job
      */
     @Bean("csvBatchJob")
-    public Job manageCsvBatchJobInstance(@Qualifier("csvBatchStep") Step firstStepManager) {
+    public Job manageCsvBatchJobInstance(
+            @Qualifier("csvBatchStep")Step csvBatchStep,
+            @Qualifier("csvTaskletStep")Step taskletStep) {
         log.info("Instanciando Job");
         return jobs.get("csvBatchJob")
                 .incrementer(new RunIdIncrementer())
-                .start(firstStepManager)
+                .start(csvBatchStep)
+                .next(taskletStep)
                 .build();
     }
 

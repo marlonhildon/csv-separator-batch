@@ -1,0 +1,15 @@
+spring:
+  profile: test
+  datasource:
+    initialization-mode: always
+    jdbcUrl: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: test
+    password: test
+  batch:
+    initialize-schema: always
+    job:
+      enabled: false
+csv:
+  file:
+    path: classpath:*.csv

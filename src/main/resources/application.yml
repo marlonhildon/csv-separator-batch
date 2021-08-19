@@ -1,5 +1,4 @@
 spring:
-  profile: dev-local
   datasource:
     initialization-mode: always
     jdbcUrl: jdbc:h2:file:${user.dir}/../H2/database.db
