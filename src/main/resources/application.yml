@@ -1,0 +1,13 @@
+spring:
+  profile: dev-local
+  datasource:
+    initialization-mode: always
+    jdbcUrl: jdbc:h2:file:${user.dir}/../H2/database.db
+    driver-class-name: org.h2.Driver
+    username: separator-batch
+    password: separator-batch
+  batch:
+    initialize-schema: always
+csv:
+  file:
+    path: file:${user.dir}/../process/*.csv

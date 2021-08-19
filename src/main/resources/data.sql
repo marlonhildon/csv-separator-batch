@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS postoVacinacao;
+
+CREATE TABLE postoVacinacao (
+  id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  endereco VARCHAR(250) NOT NULL,
+  cep VARCHAR(8) NOT NULL
+);

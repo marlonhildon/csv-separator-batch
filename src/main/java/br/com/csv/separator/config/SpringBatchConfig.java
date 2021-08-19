@@ -15,13 +15,11 @@ import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilde
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
 import javax.sql.DataSource;
@@ -38,13 +36,21 @@ public class SpringBatchConfig {
     private StepBuilderFactory steps;
 
     @Value("${csv.file.path}")
-    private Resource csvFileResource;
+    private Resource[] csvFileResource;
 
+    /**
+     * Retorna uma instância de FlatFileItemReader. Se trata de um ItemReader especialmente desenvolvido para ler
+     * arquivos com separadores.<br>
+     * É uma classe do Spring Batch.
+     *
+     * @return FlatFileItemReader&lt;PostoVacinacao&gt;
+     */
     @Bean("csvBatchItemReader")
     public FlatFileItemReader<PostoVacinacao> manageItemReader() {
+        log.info("Retornando instancia de FlatFileItemReader");
         return new FlatFileItemReaderBuilder<PostoVacinacao>()
                 .name("csvBatchItemReader")
-                .resource(csvFileResource)
+                .resource(csvFileResource[0])
                 .delimited()
                 .delimiter(";")
                 .names("id", "endereco", "cep")
@@ -54,17 +60,54 @@ public class SpringBatchConfig {
                 .build();
     }
 
+    /**
+     * Retorna uma instância de CsvBatchItemProcessor. É um ItemProcessor customizado.
+     *
+     * @return CsvBatchItemProcessor
+     */
     @Bean("csvBatchItemProcessor")
     public CsvBatchItemProcessor manageItemProcessor() {
+        log.info("Retornando instancia de CsvBatchItemProcessor");
         return new CsvBatchItemProcessor();
     }
 
-    @Bean
-    public JdbcBatchItemWriter<PostoVacinacao> writer(DataSource dataSource) {
+    /**
+     * Retorna uma instância de JdbcBatchItemWriter. É um ItemWriter do Spring Batch feito para operações com bancos
+     * de dados.
+     *
+     * @param dataSource o Datasource a ser usado
+     * @return JdbcBatchItemWriter&lt;PostoVacinacao&gt;
+     */
+    @Bean("csvBatchItemWriter")
+    public JdbcBatchItemWriter<PostoVacinacao> manageItemWriter(@Qualifier("h2Datasource") DataSource dataSource) {
+        log.info("Retornando instancia de JdbcBatchItemWriter");
         return new JdbcBatchItemWriterBuilder<PostoVacinacao>()
                 .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
                 .sql("INSERT INTO postoVacinacao (endereco, cep) VALUES (:endereco, :cep)")
                 .dataSource(dataSource)
+                .build();
+    }
+
+    /**
+     * Configuração do Step.
+     *
+     * @param itemReader o ItemReader
+     * @param itemProcessor o ItemProcessor
+     * @param itemWriter o ItemWriter
+     * @return Step
+     */
+    @Bean("csvBatchStep")
+    public Step manageCsvBatchStep(
+            FlatFileItemReader<PostoVacinacao> itemReader,
+            CsvBatchItemProcessor itemProcessor,
+            JdbcBatchItemWriter<PostoVacinacao> itemWriter)
+    {
+        log.info("Instanciando Step");
+        return steps.get("csvBatchStep")
+                .<PostoVacinacao, PostoVacinacao> chunk(10)
+                .reader(itemReader)
+                .processor(itemProcessor)
+                .writer(itemWriter)
                 .build();
     }
 
